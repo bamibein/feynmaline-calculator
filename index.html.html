@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feynmaline Calculator</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 22px 14px; background: #101114; color: #f4f4f5; }
+  .app { width: min(100%, 430px); margin: 0 auto; padding: 14px; border: 1px solid #34363d; border-radius: 14px; background: #181a1f; }
+  h1 { font-size: 19px; margin: 0 0 14px; display:flex; align-items:center; gap:9px; }
+  .eyebrow { color:#a1a1aa; font-size:11px; font-weight:700; letter-spacing:.06em; margin: 0 0 8px; }
+  .item { background:#24262d; border-radius:9px; padding:9px; margin:8px 0; }
+  .top { display:flex; align-items:center; gap:8px; }
+  .quality { width:74px; flex:0 0 74px; }
+  .q { font-weight:750; font-size:14px; }
+  .unit { color:#a1a1aa; font-size:10px; white-space:nowrap; }
+  input { width:78px; min-width:0; padding:7px 8px; color:#fff; background:#14161a; border:1px solid #454852; border-radius:7px; font:inherit; font-size:14px; }
+  .subtotal { margin-left:4px; min-width:0; }
+  .sub-label { color:#a1a1aa; font-size:10px; }
+  .sub-value { font-size:13px; font-weight:650; overflow-wrap:anywhere; }
+  .summary { border-top:1px solid #393b43; margin-top:12px; padding-top:12px; display:grid; gap:10px; }
+  .summary-label { color:#a1a1aa; font-size:12px; }
+  .summary-value { font-size:16px; font-weight:700; margin-top:2px; }
+  .price { color:#65d49a; font-size:22px; }
+  .actions { display:flex; gap:8px; margin-top:14px; }
+  button { flex:1; border:1px solid #454852; border-radius:8px; padding:9px; background:#292c33; color:#fff; font-weight:650; cursor:pointer; }
+  button:hover { background:#353944; }
+  .hint { color:#8f929c; font-size:11px; margin:12px 0 0; }
+</style>
+</head>
+<body>
+<main class="app">
+  <h1>🧮 Feynmaline Calculator</h1>
+  <p class="eyebrow">ADJUST QUANTITIES</p>
+  <section id="items"></section>
+  <section class="summary">
+    <div><div class="summary-label">Total Quantity</div><div class="summary-value" id="totalQty">0</div></div>
+    <div><div class="summary-label">Total Price</div><div class="summary-value price" id="totalPrice">0 aUEC</div></div>
+  </section>
+  <div class="actions">
+    <button id="reset" type="button">Reset quantities</button>
+    <button id="copy" type="button">Copy totals</button>
+  </div>
+  <p class="hint">Prices are fixed. Change only the quantity for each quality.</p>
+</main>
+<script>
+const qualities = [
+  { q: 965, price: 60000 },
+  { q: 906, price: 40000 },
+  { q: 880, price: 10000 },
+  { q: 769, price: 5000 },
+  { q: 682, price: 2000 }
+];
+const quantities = Object.fromEntries(qualities.map(x => [x.q, 0]));
+const fmt = n => Math.round(n).toLocaleString("en-US");
+const fmtPrice = n => n >= 1000
+  ? `${Number((n / 1000).toFixed(1)).toString()}k`
+  : fmt(n);
+const items = document.getElementById("items");
+
+function render() {
+  items.innerHTML = "";
+  qualities.forEach(({q, price}) => {
+    const card = document.createElement("div");
+    card.className = "item";
+    card.innerHTML = `
+      <div class="top">
+        <div class="quality">
+          <div class="q">Q${q}</div>
+          <div class="unit">${fmtPrice(price)} aUEC/unit</div>
+        </div>
+        <input type="number" min="0" step="1" inputmode="numeric"
+          aria-label="Quantity for quality ${q}" value="${quantities[q]}" data-q="${q}">
+        <div class="subtotal">
+          <div class="sub-label">Subtotal</div>
+          <div class="sub-value" id="subtotal-${q}">${fmtPrice(0)}</div>
+        </div>
+      </div>`;
+    items.appendChild(card);
+  });
+  items.querySelectorAll("input").forEach(input => {
+    input.addEventListener("input", event => {
+      const q = Number(event.target.dataset.q);
+      const value = event.target.value;
+      quantities[q] = value === "" ? 0 : Math.max(0, Math.floor(Number(value) || 0));
+      if (value !== "" && Number(value) < 0) event.target.value = 0;
+      updateTotals();
+    });
+  });
+  updateTotals();
+}
+function updateTotals() {
+  let qty = 0, total = 0;
+  qualities.forEach(({q, price}) => {
+    const n = Math.max(0, quantities[q] || 0);
+    qty += n; total += n * price;
+    const el = document.getElementById(`subtotal-${q}`);
+    if (el) el.textContent = fmtPrice(n * price);
+  });
+  document.getElementById("totalQty").textContent = fmt(qty);
+  document.getElementById("totalPrice").textContent = `${fmt(total)} aUEC`;
+}
+document.getElementById("reset").addEventListener("click", () => {
+  qualities.forEach(({q}) => quantities[q] = 0);
+  render();
+});
+document.getElementById("copy").addEventListener("click", async () => {
+  const lines = qualities.map(({q,price}) =>
+    `Q${q}: ${quantities[q]} × ${fmtPrice(price)} = ${fmtPrice(quantities[q] * price)} aUEC`);
+  const qty = qualities.reduce((s,x) => s + quantities[x.q], 0);
+  const total = qualities.reduce((s,x) => s + quantities[x.q] * x.price, 0);
+  const text = `${lines.join("\n")}\nTotal Quantity: ${fmt(qty)}\nTotal Price: ${fmtPrice(total)} aUEC`;
+  const btn = document.getElementById("copy");
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied!"; }
+  catch { btn.textContent = "Copy unavailable"; }
+  setTimeout(() => btn.textContent = "Copy totals", 1600);
+});
+render();
+</script>
+</body>
+</html>
